@@ -40,8 +40,8 @@ def train(model, train_data_loader, epochs):
     optimizer = torch.optim.Adam(model.parameters(),lr=1e-3,weight_decay=1e-5)    
     max_f1_1 = 0
     
-    for epoch in tqdm.tqdm(range(epochs)):
-        print("\n\n-------Epoch {}-------\n\n".format(epoch+1))
+    for epoch in range(epochs):
+        # print("\n\n-------Epoch {}-------\n\n".format(epoch+1))
         model.train()
         
         avg_loss = 0
@@ -49,7 +49,7 @@ def train(model, train_data_loader, epochs):
         y_true1 = []
         y_pred1 = []
             
-        for i_batch, sample_batched in tqdm.tqdm(enumerate(train_data_loader)):
+        for i_batch, sample_batched in tqdm.tqdm(enumerate(train_data_loader), total = len(train_data_loader), desc=f'Epoch {epoch}'):
             dialogue_ids = sample_batched[0].tolist()            
             inputs = sample_batched[1].to(device)
             targets1 = sample_batched[2].to(device)
