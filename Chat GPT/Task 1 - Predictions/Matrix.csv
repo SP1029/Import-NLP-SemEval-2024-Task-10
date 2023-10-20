@@ -1,0 +1,10 @@
+,neutral,anger,surprise,fear,joy,contempt,sadness,disgust,null
+neutral,553,7,0,10,16,4,0,0,43
+anger,86,13,0,2,5,1,1,0,10
+surprise,54,2,0,0,0,0,0,0,10
+fear,71,1,0,7,0,0,0,0,9
+joy,175,1,1,0,21,0,0,0,30
+contempt,64,4,0,2,1,0,0,0,3
+sadness,104,4,0,9,0,1,0,0,8
+disgust,12,2,0,0,1,0,0,0,6
+null,0,0,0,0,0,0,0,0,0
