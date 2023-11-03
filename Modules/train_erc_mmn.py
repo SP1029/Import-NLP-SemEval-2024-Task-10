@@ -6,18 +6,26 @@ from torch.utils import data
 from sklearn.metrics import f1_score
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
 
 from models import ERC_MMN
 from pickle_loader import load_erc
 
-batch_size = 8
+from torch.utils.tensorboard import SummaryWriter
+import os
+
+batch_size = 64
 seq_len = 15
 seq2_len = seq_len
 emb_size = 768
 hidden_size = 768
 batch_first = True
 
+experiment_id = 'erc_mmn_masac_batch_64_1'
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+writer = SummaryWriter(os.path.join('../tensorboard_logs', experiment_id))
 
 idx2utt, utt2idx, idx2emo, emo2idx, idx2speaker,\
     speaker2idx, weight_matrix, my_dataset_train, my_dataset_test,\
@@ -33,7 +41,7 @@ def get_train_test_loader(bs):
     
     return train_data_iter, test_data_iter
 
-def train(model, train_data_loader, epochs):
+def train(model, train_data_loader, start_epoch, epochs):
     class_weights1 = torch.FloatTensor(weights1).to(device)
     criterion1 = nn.CrossEntropyLoss(weight=class_weights1,reduction='none').to(device)
 
@@ -42,7 +50,7 @@ def train(model, train_data_loader, epochs):
     
     try:
     
-      for epoch in range(epochs):
+      for epoch in range(start_epoch, start_epoch + epochs):
           # print("\n\n-------Epoch {}-------\n\n".format(epoch+1))
           model.train()
           
@@ -84,26 +92,66 @@ def train(model, train_data_loader, epochs):
               optimizer.step()
               
           avg_loss /= len(train_data_loader)
-          print("Average Loss = ",avg_loss)        
-          f1_1,v_loss = validate(model,data_iter_test,epoch)
+          print("Average Loss",avg_loss)
+          writer.add_scalar('average_loss', avg_loss.cpu().detach().numpy()[0], epoch+1)
+          f1_1,v_loss, c_matrix = validate(model,data_iter_test,epoch)
+          writer.add_scalar("F1 Score",f1_1, epoch+1)
           
-          # if f1_1 > max_f1_1:
-          #     print(f"Saving model at epoch {epoch}")
-          #     max_f1_1 = f1_1
-          torch.save({
-            'model_state_dict': model.state_dict(),
-            'model': model
-            }, '../Models/MaSaC_ERC_MMN.pkl')
+          if f1_1 > max_f1_1:
+              print(f"Saving model at epoch {epoch}")
+              max_f1_1 = f1_1
+              save_model(model,
+                '../Models/',
+                experiment_id,
+                batch_size,
+                start_epoch + epoch,
+                c_matrix)
     except Exception as e:
-      print('Error in train', e)
+      # print('Error in train', e)
+      raise e
     finally:
-      pass
-      # torch.save({
-      #   'model_state_dict': model.state_dict(),
-      #   'model': model
-      #   }, '../Models/MaSaC_ERC_MMN.pkl')
+      # pass
+      if f1_1 > max_f1_1:
+        save_model(model,
+          '../Models/',
+          experiment_id,
+          batch_size,
+          start_epoch + epochs,
+          c_matrix)
 
     return model
+
+def save_model(model, model_dir, experiment_id, batch_size, epochs, c_matrix = None):
+  """Save the model to disk
+
+  Args:
+      model (nn.Module): Model object. Model weights (state_dict()) 
+                      and model object both are stored on disk
+      model_dir (str): Path to save the model
+      experiment_id (str): The ID of the experiment
+                              `<some_id>_<exp_number>`
+      batch_size (int): Batch size
+      c_matrix (_type_, optional): confusion matrix. Defaults to None.
+  """
+  torch.save({
+    'model_state_dict': model.state_dict(),
+    'model': model,
+    'confusion_matrix': c_matrix,
+    'epochs': epochs,
+    'hyperparameter':{
+      'batch_size': batch_size,
+      'seq_len': seq_len,
+      'seq2_len': seq2_len,
+      'emb_size': emb_size,
+      'hidden_size': hidden_size,
+      'batch_first': batch_first}
+    }, os.path.join(model_dir, experiment_id + '.pkl'))
+  
+def load_model_if_exists(model_dir, experiment_id):  
+  state = torch.load('../Models/MaSaC_ERC_MMN.pkl')
+  model = state['model']
+  model.load_state_dict(state['model_state_dict'])
+  return model
 
 def validate(model, test_data_loader,epoch):
     # print("\n\n***VALIDATION ({})***\n\n".format(epoch))
@@ -153,13 +201,17 @@ def validate(model, test_data_loader,epoch):
 
       print(class_report)
       print("Confusion Matrix: \n",conf_mat1)
-    
+      
+      acc = accuracy_score(y_true1, y_pred1)
+      writer.add_scalar('Accuracy', acc, epoch+1)
       wtd_f1 = f1_score(y_true1,y_pred1,average="weighted")
-      return wtd_f1, avg_loss
+      return wtd_f1, avg_loss, conf_mat1
     
 n_emotions = 8
-model = ERC_MMN(hidden_size,weight_matrix,utt2idx,batch_size,seq_len, n_emotions=n_emotions).to(device)
-weights1 = [1.0]*n_emotions
+# model = ERC_MMN(hidden_size,weight_matrix,utt2idx,batch_size,seq_len, n_emotions=n_emotions).to(device)
+model = load_model_if_exists(model_dir='../Models', experiment_id=experiment_id)
+# weights1 = [1.0]*n_emotions
+weights1 = [57.3859649122807,5.379934210526316,19.58682634730539,11.377391304347826,16.034313725490197,2.2101351351351353,11.558303886925795,17.7289972899729]
 data_iter_train, data_iter_test = get_train_test_loader(batch_size)
 
-model = train(model, data_iter_train, epochs = 100)
+model = train(model, data_iter_train, start_epoch = 100, epochs = 100)

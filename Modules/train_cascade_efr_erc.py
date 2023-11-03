@@ -22,7 +22,7 @@ batch_first = True
 idx2utt, utt2idx, idx2emo, emo2idx, idx2speaker,\
     speaker2idx, weight_matrix, my_dataset_train, my_dataset_test,\
     final_speaker_info, final_speaker_dialogues, final_speaker_emotions,\
-    final_speaker_indices, final_utt_len = load_erc()
+    final_speaker_indices, final_utt_len = load_erc('../Pickles/MaSaC')
 
 weight_matrix = weight_matrix.to(device)
 train_cnt = len(my_dataset_train)
@@ -30,7 +30,7 @@ train_cnt = len(my_dataset_train)
 _, _, _, _, _, _, _, my_dataset_train2, my_dataset_test2,\
         global_speaker_info2, speaker_dialogues2, speaker_emotions2, \
         speaker_indices2, utt_len2, global_speaker_info_test2, speaker_dialogues_test2, \
-        speaker_emotions_test2, speaker_indices_test2, utt_len_test2 = load_efr()
+        speaker_emotions_test2, speaker_indices_test2, utt_len_test2 = load_efr('../Pickles/MaSaC')
     
 def get_train_test_loader(bs):
     train_data_iter = data.DataLoader(my_dataset_train,batch_size=bs, drop_last=True)
@@ -49,10 +49,9 @@ def train(trigger_model, emotion_model, model, train_data_loader, train_data_loa
     optimizer = torch.optim.Adam(params,lr=1e-6,weight_decay=1e-6)
         
     max_f1_1 = 0
-    for epoch in tqdm.tqdm(range(epochs)):
+    for epoch in range(epochs):
         train_loader2 = enumerate(train_data_loader2)
         
-        print("\n\n-------Epoch {}-------\n\n".format(epoch+1))
         model.train()
         emotion_model.train()
         trigger_model.eval()
@@ -64,7 +63,7 @@ def train(trigger_model, emotion_model, model, train_data_loader, train_data_loa
         
         y_pred1_old = []
             
-        for i_batch, sample_batched in tqdm.tqdm(enumerate(train_data_loader)):
+        for i_batch, sample_batched in tqdm.tqdm(enumerate(train_data_loader), total=len(train_data_loader), ncols=100, desc=f'Epoch {epoch}'):
             dialogue_ids = sample_batched[0].tolist()
             inputs = sample_batched[1].to(device)           
             targets1 = sample_batched[2].to(device)
@@ -143,7 +142,7 @@ def train(trigger_model, emotion_model, model, train_data_loader, train_data_loa
     return model
 
 def validate(emotion_model, trigger_model, model, test_data_loader, test_data_loader2, epoch):
-    print("\n\n***VALIDATION ({})***\n\n".format(epoch))
+    # print("\n\n***VALIDATION ({})***\n\n".format(epoch))
     class_weights1 = torch.FloatTensor(weights1).to(device)
     criterion1 = nn.CrossEntropyLoss(weight=class_weights1,reduction='none')
     
@@ -161,7 +160,7 @@ def validate(emotion_model, trigger_model, model, test_data_loader, test_data_lo
         
       y_pred1_old = []
             
-      for i_batch, sample_batched in tqdm.tqdm(enumerate(test_data_loader)):
+      for i_batch, sample_batched in tqdm.tqdm(enumerate(test_data_loader), total=len(test_data_loader), ncols=100, desc=f'Validating Epoch {epoch}'):
           dialogue_ids = sample_batched[0].tolist()
           dialogue_ids = [d+train_cnt for d in dialogue_ids]
           inputs = sample_batched[1].to(device)           
@@ -241,14 +240,15 @@ nhid = 768
 nlayers = 6
 nhead = 2
 dropout = 0.2
+n_emotions = 8
 trigger_model = EFR_TX(weight_matrix, utt2idx, nclass, emsize, nhead, nhid, nlayers, device, dropout).to(device)
 # trigger_model.load_state_dict(torch.load("efr_best_model.pth"))
 
-emotion_model = ERC_MMN(hidden_size, weight_matrix, utt2idx, batch_size, seq_len).to(device)
+emotion_model = ERC_MMN(hidden_size, weight_matrix, utt2idx, batch_size, seq_len, n_emotions=n_emotions).to(device)
 # emotion_model.load_state_dict(torch.load("erc_best_model.pth"))
 
-model = cascade(hidden_size, 7).to(device)
+model = cascade(hidden_size, n_emotions).to(device)
 
-weights1 = [1.0]*7
+weights1 = [1.0]*n_emotions
 data_iter_train, data_iter_test, data_iter_train2, data_iter_test2 = get_train_test_loader(batch_size)
 model = train(trigger_model,emotion_model,model, data_iter_train, data_iter_train2, epochs = 100)
